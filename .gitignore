@@ -1,0 +1,23 @@
+# Directories
+build/
+results/
+deprecate/
+CMakeFiles/
+private_tests/
+
+# Files
+*.pyc
+*.py~
+Makefile
+*.so
+CMakeCache.txt
+cmake_install.cmake
+*.pvd
+*.pvtu
+*.vtu
+
+.cache/
+htmlcov/
+unit_tests/.coverage
+unit_tests/htmlcov/
+.pytest_cache/
