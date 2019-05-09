@@ -118,8 +118,11 @@ def test_steady_stokes(k):
         forms_stokes = FormsStokes(mesh, mixedL, mixedG, alpha,h_d=h_d,ds=ds).forms_steady(nu, f)
 
         # No-slip boundary conditions, set pressure in one of the corners
-        bc0 = DirichletBC(mixedG.sub(0), Constant((0, 0)), Gamma)
-        bcs=[bc0]
+        bc0 = DirichletBC(mixedG.sub(0), Constant(zero_vec), boundaries, mark["wall"])
+        # Normal flow constrain, only for vertical inlet and outlet
+        bc_in = DirichletBC(mixedG.sub(0).sub(1), Constant(0.0), boundaries, mark["inlet"])
+        bc_out = DirichletBC(mixedG.sub(0).sub(1), Constant(0.0), boundaries, mark["outlet"])
+        bcs=[bc0] + [bc_in,bc_out]
 
         # Initialize static condensation class
         ssc = StokesStaticCondensation(mesh,
