@@ -5,7 +5,7 @@
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
 from dolfin import (Form, FacetNormal, CellDiameter, ds, dx, dS,
-                    div, dot, sym, grad, inner, TestFunctions,
+                    div, dot, sym, grad, inner, TestFunctions,Expression,
                     TrialFunctions, Constant, Identity, outer)
 import numpy as np
 
@@ -36,7 +36,8 @@ class FormsStokes:
     from global momentum and global mass conservation statement.
     """
 
-    def __init__(self, mesh, FuncSpaces_L, FuncSpaces_G, alpha,
+    def __init__(self, mesh, FuncSpaces_L, FuncSpaces_G, alpha, 
+                 h_d=[Expression(('0.0','0.0'),degree=3), Expression(('0.0','0.0'),degree=3)],
                  beta_stab=Constant(0.), ds=ds):
         self.mixedL = FuncSpaces_L
         self.mixedG = FuncSpaces_G
@@ -44,10 +45,12 @@ class FormsStokes:
         self.beta_stab = beta_stab
         self.alpha = alpha
         self.he = CellDiameter(mesh)
+        self.h_d = h_d 
         self.ds = ds
         self.gdim = mesh.geometry().dim()
         # TODO: class can be much condensed
-        # Note ds(98) will be marked as free-slip boundary
+        # Note ds(98) will be marked as free-slip boundary (Dirichlet BC)
+        # Note ds(99,100) will be marked as inlet/outlet pressure boundary (Neumann BC), hd is a vector of Expression on inlet/outlet
 
     def forms_steady(self, nu, f):
         '''
@@ -115,6 +118,7 @@ class FormsStokes:
         n = self.n
         he = self.he
         alpha = self.alpha
+        h_d = self.h_d
         beta_stab = self.beta_stab
         facet_integral = self.facet_integral
 
@@ -160,6 +164,7 @@ class FormsStokes:
         # Righthandside
         Q_S = dot(f, w)*dx
         S_S = facet_integral(dot(Constant(zero_vec), wbar))
+        S_S += dot(h_d[0],wbar)*ds(99) + dot(h_d[1],wbar)*ds(100) #Neumann BC
         return {'A_S': A_S, 'G_S': G_S, 'G_ST': G_ST,
                 'B_S': B_S, 'Q_S': Q_S, 'S_S': S_S}
 
