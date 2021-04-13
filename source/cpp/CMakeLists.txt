@@ -21,6 +21,7 @@ pybind11_add_module(particle_wrapper SHARED
   advect_particles.cpp
   formutils.cpp
   particles.cpp
+  assembler_static_condensation.cpp
   stokesstaticcondensation.cpp
   pdestaticcondensation.cpp
   adddelete.cpp

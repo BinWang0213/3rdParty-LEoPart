@@ -56,6 +56,10 @@ public:
     for (unsigned int cidx = 0; cidx < _mesh->num_cells(); ++cidx)
       for (unsigned int pidx = 0; pidx < num_cell_particles(cidx); ++pidx)
         _cell2part[cidx][pidx].push_back(p);
+
+  // Resize members for new number of properties
+  _empty_cell_property_values.resize(num_properties());
+
     return _ptemplate.size() - 1;
   }
 
@@ -98,6 +102,12 @@ public:
                      property_idcs,
                  const double theta, const std::size_t step);
 
+  // Used when the time step can vary between steps
+  void increment(const Function& dphih_dt,
+                 Eigen::Ref<const Eigen::Array<std::size_t, Eigen::Dynamic, 1>>
+                     property_idcs,
+                 const double theta, const std::size_t step, const double dt);
+
   Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
   positions();
   std::vector<double> get_property(const std::size_t idx);
@@ -128,6 +138,18 @@ public:
   // process
   void relocate(std::vector<std::array<std::size_t, 3>>& reloc);
 
+  // If a cell has no particles, take the values from this cell function
+  // as the default value in get_particle_contributions()
+  void set_empty_cell_default_values(
+    std::shared_ptr<dolfin::MeshFunction<double>> cell_function,
+    const std::size_t property_idx)
+  {
+    if (_empty_cell_property_values.size() < num_properties())
+        _empty_cell_property_values.resize(num_properties());
+
+    _empty_cell_property_values[property_idx] = cell_function;
+  }
+
 private:
   std::vector<std::vector<particle>> _comm_snd;
 
@@ -141,6 +163,8 @@ private:
   // Particle properties
   std::vector<unsigned int> _ptemplate;
   std::size_t _plen;
+  std::vector<std::shared_ptr<dolfin::MeshFunction<double>>>
+    _empty_cell_property_values;
 
   // Needed for parallel
   const MPI_Comm _mpi_comm;

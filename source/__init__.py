@@ -6,11 +6,27 @@
 
 # flake8: noqa
 
-from .ParticleFun import (particles, advect_particles, advect_rk2, advect_rk3, l2projection,
-                          StokesStaticCondensation, PDEStaticCondensation, AddDelete)
+from .ParticleFun import (
+    particles,
+    advect_particles,
+    advect_rk2,
+    advect_rk3,
+    advect_rk4,
+    l2projection,
+    AssemblerStaticCondensation,
+    StokesStaticCondensation,
+    PDEStaticCondensation,
+    AddDelete,
+)
 from .FormsPDEMap import FormsPDEMap
 from .FormsStokes import FormsStokes
-from .InitialConditions import (BinaryBlock, GaussianPulse, SineHump, CosineHill)
-from .ParticleGenerator import (RandomRectangle, RandomCircle, RegularRectangle,
-                                RandomBox, RegularBox)
+from .InitialConditions import BinaryBlock, GaussianPulse, SlottedDisk, SineHump, CosineHill
+from .ParticleGenerator import (
+    RandomRectangle,
+    RandomCircle,
+    RegularRectangle,
+    RandomBox,
+    RegularBox,
+    RandomCell,
+)
 from .utils import assign_particle_values

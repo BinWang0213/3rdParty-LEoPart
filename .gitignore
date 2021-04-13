@@ -4,6 +4,7 @@ results/
 deprecate/
 CMakeFiles/
 private_tests/
+dist/
 
 # Files
 *.pyc
@@ -15,9 +16,12 @@ cmake_install.cmake
 *.pvd
 *.pvtu
 *.vtu
+*.xml
 
 .cache/
+.coverage
 htmlcov/
 unit_tests/.coverage
 unit_tests/htmlcov/
 .pytest_cache/
+.idea/

@@ -35,7 +35,9 @@ particles::particles(
   // Set up communication array
   _comm_snd.resize(MPI::size(_mpi_comm));
 
+  // Initialise members
   _cell2part.resize(mesh.num_cells());
+  _empty_cell_property_values.resize(num_properties());
 
   // Calculate the offset for each particle property and overall size
   std::vector<unsigned int> offset = {0};
@@ -111,7 +113,7 @@ void particles::interpolate(const Function& phih,
     }
   }
 }
-
+//-----------------------------------------------------------------------------
 void particles::increment(const Function& phih_new, const Function& phih_old,
                           const std::size_t property_idx)
 {
@@ -158,7 +160,7 @@ void particles::increment(const Function& phih_new, const Function& phih_old,
     }
   }
 }
-
+//-----------------------------------------------------------------------------
 void particles::increment(
     const Function& phih_new, const Function& phih_old,
     Eigen::Ref<const Eigen::Array<std::size_t, Eigen::Dynamic, 1>>
@@ -232,7 +234,70 @@ void particles::increment(
     }
   }
 }
+//-----------------------------------------------------------------------------
+void particles::increment(
+    const Function& dphih_dt,
+    Eigen::Ref<const Eigen::Array<std::size_t, Eigen::Dynamic, 1>>
+        property_idcs,
+    const double theta, const std::size_t step, const double dt)
+{
+  // Check if size =2 and
+  if (property_idcs.size() != 2)
+    dolfin_error("particles.cpp::increment", "Set property array",
+                 "Property indices must come in pairs");
+  if (property_idcs[1] <= property_idcs[0])
+    dolfin_error("particles.cpp::increment", "Set property array",
+                 "Property must be sorted in ascending order");
 
+  // Check if length of slots matches
+  if (_ptemplate[property_idcs[0]] != _ptemplate[property_idcs[1]])
+    dolfin_error("particles.cpp::increment", "Set property array",
+                 "Found none ore incorrect size at particle slot");
+
+  std::size_t space_dimension, value_size_loc;
+  space_dimension = dphih_dt.function_space()->element()->space_dimension();
+
+  value_size_loc = 1;
+  for (std::size_t i = 0;
+       i < dphih_dt.function_space()->element()->value_rank(); i++)
+    value_size_loc *= dphih_dt.function_space()->element()->value_dimension(i);
+
+  if (value_size_loc != _ptemplate[property_idcs[0]])
+    dolfin_error("particles::increment", "get property idx",
+                 "Local value size mismatches particle template property");
+
+  for (CellIterator cell(*(_mesh)); !cell.end(); ++cell)
+  {
+    std::vector<double> coeffs;
+    Utils::return_expansion_coeffs(coeffs, *cell, &dphih_dt);
+
+    for (std::size_t pidx = 0; pidx < num_cell_particles(cell->index()); pidx++)
+    {
+      Eigen::MatrixXd basis_mat(value_size_loc, space_dimension);
+      Utils::return_basis_matrix(basis_mat.data(), x(cell->index(), pidx),
+                                 *cell, dphih_dt.function_space()->element());
+
+      Eigen::Map<Eigen::VectorXd> exp_coeffs(coeffs.data(), space_dimension);
+      Eigen::VectorXd delta_phi = basis_mat * exp_coeffs;
+
+      Point delta_phi_p(_ptemplate[property_idcs[0]], delta_phi.data());
+      // Do the update
+      if (step == 1)
+      {
+        _cell2part[cell->index()][pidx][property_idcs[0]] += dt * delta_phi_p;
+      }
+      if (step != 1)
+      {
+        _cell2part[cell->index()][pidx][property_idcs[0]]
+            += dt * (theta * delta_phi_p
+               + (1. - theta)
+                     * _cell2part[cell->index()][pidx][property_idcs[1]]);
+      }
+      _cell2part[cell->index()][pidx][property_idcs[1]] = delta_phi_p;
+    }
+  }
+}
+//-----------------------------------------------------------------------------
 Eigen::Array<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>
 particles::positions()
 {
@@ -260,7 +325,7 @@ particles::positions()
 
   return xp;
 }
-
+//-----------------------------------------------------------------------------
 std::vector<double> particles::get_property(const std::size_t idx)
 {
 
@@ -288,13 +353,13 @@ std::vector<double> particles::get_property(const std::size_t idx)
   }
   return property_vector;
 }
-
+//-----------------------------------------------------------------------------
 void particles::push_particle(const double dt, const Point& up,
                               const std::size_t cidx, const std::size_t pidx)
 {
   _cell2part[cidx][pidx][0] += up * dt;
 }
-
+//-----------------------------------------------------------------------------
 void particles::particle_communicator_collect(const std::size_t cidx,
                                               const std::size_t pidx)
 {
@@ -311,7 +376,7 @@ void particles::particle_communicator_collect(const std::size_t cidx,
   for (const auto& p : procs)
     _comm_snd[p].push_back(ptemp);
 }
-
+//-----------------------------------------------------------------------------
 void particles::particle_communicator_push()
 {
   // Assertion if sender has correct size
@@ -369,7 +434,7 @@ void particles::particle_communicator_push()
     }
   }
 }
-
+//-----------------------------------------------------------------------------
 void particles::relocate()
 {
   // Method to relocate particles on moving mesh
@@ -402,7 +467,7 @@ void particles::relocate()
 
   relocate(reloc);
 }
-
+//-----------------------------------------------------------------------------
 std::vector<double> particles::unpack_particle(const particle part)
 {
   // Unpack particle into std::vector<double>
@@ -412,7 +477,7 @@ std::vector<double> particles::unpack_particle(const particle part)
                          part[i].coordinates() + _ptemplate[i]);
   return part_unpacked;
 }
-
+//-----------------------------------------------------------------------------
 void particles::get_particle_contributions(
     Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>& q,
     Eigen::Matrix<double, Eigen::Dynamic, 1>& f, const Cell& dolfin_cell,
@@ -459,6 +524,21 @@ void particles::get_particle_contributions(
         f(m + lb) = _cell2part[cidx][pidx][property_idx][m];
     }
   }
+  else if (_empty_cell_property_values[property_idx])
+  {
+    // We have a default value assigned for empty cells
+    const double default_value =
+        (*(_empty_cell_property_values[property_idx]))[dolfin_cell];
+
+//    std::cout << "Found empty cell, filling with default value "
+//              << default_value << std::endl;
+
+    // Works with DG spaces only, assuming the (0, 0) entry is the
+    // DoF associated with the constant basis function
+    q.setIdentity(space_dimension, space_dimension);
+    f.resize(space_dimension, 1);
+    f(0,0) = default_value;
+  }
   else
   {
     // TODO: make function recognize FunctionSpace.ufl_element().family()!
@@ -477,7 +557,7 @@ void particles::get_particle_contributions(
                  cidx);
   }
 }
-
+//-----------------------------------------------------------------------------
 void particles::relocate(std::vector<std::array<std::size_t, 3>>& reloc)
 {
   const std::size_t mpi_size = MPI::size(_mpi_comm);
